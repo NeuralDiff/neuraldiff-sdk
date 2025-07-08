@@ -1,0 +1,89 @@
+{
+    "name": "neuraldiff",
+    "version": "0.1.0",
+    "description": "Intelligent visual regression detection for AI-assisted development",
+    "main": "dist/index.js",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist",
+        "src"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs"
+        },
+        "./react": {
+            "types": "./dist/react.d.ts",
+            "require": "./dist/react.js",
+            "import": "./dist/react.mjs"
+        },
+        "./vue": {
+            "types": "./dist/vue.d.ts",
+            "require": "./dist/vue.js",
+            "import": "./dist/vue.mjs"
+        }
+    },
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "test": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "lint": "eslint . --ext .ts,.tsx",
+        "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\"",
+        "typecheck": "tsc --noEmit",
+        "prepublishOnly": "npm run build"
+    },
+    "keywords": [
+        "visual-regression",
+        "visual-testing",
+        "testing",
+        "automation",
+        "ai",
+        "screenshot",
+        "comparison",
+        "diff",
+        "regression-testing",
+        "developer-tools"
+    ],
+    "author": {
+        "name": "NeuralDiff Team",
+        "email": "team@neuraldiff.dev"
+    },
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/neuraldiff/neuraldiff-sdk.git"
+    },
+    "bugs": {
+        "url": "https://github.com/neuraldiff/neuraldiff-sdk/issues"
+    },
+    "homepage": "https://neuraldiff.dev",
+    "engines": {
+        "node": ">=16.0.0"
+    },
+    "dependencies": {
+        "axios": "^1.6.0",
+        "p-limit": "^4.0.0",
+        "pixelmatch": "^5.3.0",
+        "pngjs": "^7.0.0",
+        "sharp": "^0.33.0",
+        "ws": "^8.16.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "@types/react": "^19.1.8",
+        "@types/ws": "^8.5.10",
+        "@typescript-eslint/eslint-plugin": "^6.19.0",
+        "@typescript-eslint/parser": "^6.19.0",
+        "@vitest/coverage-v8": "^1.2.0",
+        "eslint": "^8.56.0",
+        "eslint-config-prettier": "^9.1.0",
+        "prettier": "^3.2.0",
+        "tsup": "^8.0.0",
+        "typescript": "^5.3.0",
+        "vitest": "^1.2.0"
+    }
+}
