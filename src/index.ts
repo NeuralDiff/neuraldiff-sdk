@@ -259,6 +259,9 @@ export class NeuroSpec extends EventEmitter {
 // Export types and utilities
 export * from './types';
 
+// Export hashing functionality
+export * from './hashing';
+
 // Export default instance factory
 export default function createNeuroSpec(options: NeuralDiffOptions): NeuroSpec {
     return new NeuroSpec(options);
