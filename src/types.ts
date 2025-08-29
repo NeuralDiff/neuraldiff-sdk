@@ -7,7 +7,7 @@ export interface NeuralDiffOptions {
     apiUrl?: string;
     timeout?: number;
     concurrency?: number;
-    comparison?: ComparisonOptions;
+    comparison?: CompareOptions;
     capture?: Partial<CaptureOptions>;
   }
   

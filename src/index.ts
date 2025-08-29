@@ -21,17 +21,18 @@ export class NeuroSpec extends EventEmitter {
         // Initialize configuration
         this.config = options;
 
-        if (!this.config.apiKey) {
-            throw new Error('NeuroSpec API key is required');
+        // API key is optional for local daemon
+        if (this.config.apiUrl && this.config.apiUrl.includes('api.') && !this.config.apiKey) {
+            throw new Error('API key is required for cloud API');
         }
 
-        // Initialize HTTP client
+        // Initialize HTTP client for local daemon
         this.client = axios.create({
-            baseURL: this.config.apiUrl || 'https://api.neurospec.dev',
+            baseURL: this.config.apiUrl || 'http://localhost:7878',
             headers: {
-                'Authorization': `Bearer ${this.config.apiKey}`,
                 'Content-Type': 'application/json',
-                'X-SDK-Version': '0.1.0'
+                'X-SDK-Version': '0.1.0',
+                'User-Agent': 'neuraldiff-sdk/0.1.0'
             },
             timeout: this.config.timeout || 30000
         });
@@ -58,18 +59,21 @@ export class NeuroSpec extends EventEmitter {
             // Quick hash for deduplication (placeholder)
             const quickHash = `hash-${Date.now()}`;
 
-            const response = await this.client.post('/capture', {
-                ...captureConfig,
-                quickHash
+            const response = await this.client.post('/api/screenshots/capture', {
+                url: captureConfig.url || 'http://localhost:3000',
+                viewport: captureConfig.viewport || { width: 1280, height: 720 },
+                waitFor: captureConfig.waitFor || 'networkidle',
+                fullPage: captureConfig.fullPage || false,
+                metadata: { name, ...captureConfig.metadata }
             });
 
             return {
-                id: response.data.id,
+                id: response.data.id || `${name}-${Date.now()}`,
                 name,
-                status: 'captured',
-                timestamp: response.data.timestamp,
-                hash: response.data.hash,
-                metadata: response.data.metadata
+                status: response.data.success ? 'captured' : 'error',
+                timestamp: Date.now(),
+                hash: response.data.hash || '',
+                metadata: response.data.metadata || {}
             };
         } catch (error) {
             this.emit('error', { operation: 'capture', name, error });
@@ -84,40 +88,24 @@ export class NeuroSpec extends EventEmitter {
         try {
             const startTime = Date.now();
 
-            // Fast path: perceptual hash comparison
-            const quickResult = await this.client.post('/compare/quick', {
+            // Use daemon's analysis endpoints
+            const analysisResult = await this.client.post('/api/analyze/working-directory', {
                 name,
                 algorithm: options?.algorithm || 'hybrid'
             });
 
-            if (quickResult.data.identical) {
-                return {
-                    name,
-                    hasChanges: false,
-                    duration: Date.now() - startTime,
-                    summary: 'No visual changes detected',
-                    changes: [],
-                    confidence: 1.0
-                };
-            }
-
-            // Detailed comparison needed
-            const detailedResult = await this.client.post('/compare/detailed', {
-                name,
-                ...options
-            });
-
-            // Semantic analysis of changes (placeholder)
-            const semanticChanges: SemanticChange[] = [];
-
+            const result = analysisResult.data;
+            const hasChanges = result.phases?.static?.result?.probability > 0.1;
+            
             return {
                 name,
-                hasChanges: true,
+                hasChanges,
                 duration: Date.now() - startTime,
-                summary: this.generateSummary(semanticChanges),
-                changes: semanticChanges,
-                confidence: detailedResult.data.confidence,
-                diff: detailedResult.data.diffUrl
+                summary: hasChanges ? 
+                    `Visual changes detected (${(result.phases?.static?.result?.probability * 100).toFixed(1)}% probability)` :
+                    'No visual changes detected',
+                changes: this.convertToSemanticChanges(result),
+                confidence: result.phases?.static?.result?.confidence || 0.8
             };
         } catch (error) {
             this.emit('error', { operation: 'compare', name, error });
@@ -132,14 +120,14 @@ export class NeuroSpec extends EventEmitter {
         const watcherId = `watch-${Date.now()}`;
 
         // Establish WebSocket connection for real-time updates
-        this.ws = new WebSocket(`${this.config.apiUrl?.replace('https', 'wss')}/watch`);
+        const wsUrl = this.config.apiUrl?.replace('http', 'ws') || 'ws://localhost:7878';
+        this.ws = new WebSocket(`${wsUrl}/ws`);
 
         this.ws.on('open', () => {
             this.ws?.send(JSON.stringify({
-                type: 'start',
+                type: 'start-watch',
                 url,
-                options,
-                apiKey: this.config.apiKey
+                options
             }));
         });
 
@@ -224,6 +212,37 @@ export class NeuroSpec extends EventEmitter {
             severity: message.severity,
             changes: message.changes
         };
+    }
+
+    private convertToSemanticChanges(result: any): SemanticChange[] {
+        if (!result.phases?.static?.result) return [];
+        
+        const staticResult = result.phases.static.result;
+        const changes: SemanticChange[] = [];
+        
+        staticResult.reasons?.forEach((reason: string, index: number) => {
+            changes.push({
+                element: staticResult.affectedPages?.[0] || 'unknown',
+                change: reason,
+                severity: staticResult.severity === 'breaking' ? 'high' : 
+                         staticResult.severity === 'major' ? 'medium' : 'low',
+                confidence: staticResult.confidence,
+                type: this.inferChangeType(reason)
+            });
+        });
+        
+        return changes;
+    }
+    
+    private inferChangeType(reason: string): ChangeType {
+        const lowerReason = reason.toLowerCase();
+        if (lowerReason.includes('color') || lowerReason.includes('background')) return 'color';
+        if (lowerReason.includes('layout') || lowerReason.includes('position')) return 'layout';
+        if (lowerReason.includes('size') || lowerReason.includes('width') || lowerReason.includes('height')) return 'size';
+        if (lowerReason.includes('font') || lowerReason.includes('text')) return 'typography';
+        if (lowerReason.includes('margin') || lowerReason.includes('padding')) return 'spacing';
+        if (lowerReason.includes('style') || lowerReason.includes('css')) return 'style';
+        return 'content';
     }
 
     private async executeBatchOperation(op: BatchOperation): Promise<BatchResult> {
