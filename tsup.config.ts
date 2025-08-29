@@ -1,19 +1,18 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: {
-    index: 'src/index.ts',
-    react: 'src/react.ts',
-    vue: 'src/vue.ts',
-  },
+  entry: ['src/index.ts'],
   format: ['cjs', 'esm'],
   dts: true,
+  clean: true,
   splitting: false,
   sourcemap: true,
-  clean: true,
-  treeshake: true,
-  minify: false,
+  minify: process.env.NODE_ENV === 'production',
   external: ['react', 'vue'],
-  noExternal: ['axios', 'ws', 'p-limit', 'sharp', 'pixelmatch', 'pngjs'],
-  onSuccess: 'echo "Build completed successfully!"',
-}); 
+  banner: {
+    js: '/* NeuralDiff SDK - AI-powered visual regression testing */',
+  },
+  esbuildOptions(options) {
+    options.conditions = ['module'];
+  },
+});
