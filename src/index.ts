@@ -7,7 +7,7 @@ import { EventEmitter } from 'events';
 import axios, { AxiosInstance } from 'axios';
 import WebSocket from 'ws';
 import pLimit from 'p-limit';
-import { CaptureOptions, CompareOptions, ComparisonResult, NeuralDiffOptions, WatchOptions, Watcher, BatchOperation, BatchResult, SemanticChange, WatchResult, CaptureResult } from './types';
+import { CaptureOptions, CompareOptions, ComparisonResult, NeuralDiffOptions, WatchOptions, Watcher, BatchOperation, BatchResult, SemanticChange, WatchResult, CaptureResult, ChangeType } from './types';
 
 export class NeuroSpec extends EventEmitter {
     private client: AxiosInstance;
@@ -39,9 +39,6 @@ export class NeuroSpec extends EventEmitter {
 
         // Initialize concurrency limiter
         this.limiter = pLimit(this.config.concurrency || 5);
-
-        // Initialize concurrency limiter
-        this.limiter = pLimit(this.config.concurrency || 5);
     }
 
     /**
@@ -56,15 +53,12 @@ export class NeuroSpec extends EventEmitter {
                 timestamp: Date.now()
             };
 
-            // Quick hash for deduplication (placeholder)
-            const quickHash = `hash-${Date.now()}`;
-
             const response = await this.client.post('/api/screenshots/capture', {
                 url: captureConfig.url || 'http://localhost:3000',
                 viewport: captureConfig.viewport || { width: 1280, height: 720 },
                 waitFor: captureConfig.waitFor || 'networkidle',
                 fullPage: captureConfig.fullPage || false,
-                metadata: { name, ...captureConfig.metadata }
+                metadata: { name }
             });
 
             return {
@@ -188,21 +182,6 @@ export class NeuroSpec extends EventEmitter {
     }
 
     // Private helper methods
-    private generateSummary(changes: SemanticChange[]): string {
-        if (changes.length === 0) return 'No visual changes detected';
-
-        const highSeverity = changes.filter(c => c.severity === 'high').length;
-        const mediumSeverity = changes.filter(c => c.severity === 'medium').length;
-
-        if (highSeverity > 0) {
-            return `${highSeverity} critical visual change${highSeverity > 1 ? 's' : ''} detected`;
-        } else if (mediumSeverity > 0) {
-            return `${mediumSeverity} moderate visual change${mediumSeverity > 1 ? 's' : ''} detected`;
-        }
-
-        return `${changes.length} minor visual change${changes.length > 1 ? 's' : ''} detected`;
-    }
-
     private processWatchChange(message: any): WatchResult {
         return {
             path: message.path,
@@ -220,7 +199,7 @@ export class NeuroSpec extends EventEmitter {
         const staticResult = result.phases.static.result;
         const changes: SemanticChange[] = [];
         
-        staticResult.reasons?.forEach((reason: string, index: number) => {
+        staticResult.reasons?.forEach((reason: string) => {
             changes.push({
                 element: staticResult.affectedPages?.[0] || 'unknown',
                 change: reason,
