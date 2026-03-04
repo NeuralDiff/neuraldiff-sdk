@@ -58,13 +58,17 @@
   },
   "peerDependencies": {
     "react": ">=16.8.0",
-    "vue": ">=3.0.0"
+    "vue": ">=3.0.0",
+    "playwright": ">=1.40.0"
   },
   "peerDependenciesMeta": {
     "react": {
       "optional": true
     },
     "vue": {
+      "optional": true
+    },
+    "playwright": {
       "optional": true
     }
   },

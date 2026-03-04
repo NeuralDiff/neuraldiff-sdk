@@ -8,12 +8,15 @@ import axios, { AxiosInstance } from 'axios';
 import WebSocket from 'ws';
 import pLimit from 'p-limit';
 import { CaptureOptions, CompareOptions, ComparisonResult, NeuralDiffOptions, WatchOptions, Watcher, BatchOperation, BatchResult, SemanticChange, WatchResult, CaptureResult, ChangeType } from './types';
+import { DaemonServer } from './daemon/server';
+import type { DaemonConfig, DaemonStatus } from './daemon/types';
 
 export class NeuroSpec extends EventEmitter {
     private client: AxiosInstance;
     private ws: WebSocket | null = null;
     private config: NeuralDiffOptions;
     private limiter: any;
+    private daemon: DaemonServer | null = null;
 
     constructor(options: NeuralDiffOptions) {
         super();
@@ -181,6 +184,75 @@ export class NeuroSpec extends EventEmitter {
         this.emit('baseline:rollback', { name, ...options });
     }
 
+    /**
+     * Start the local daemon HTTP server.
+     * The daemon serves API endpoints that the MCP server and SDK clients call,
+     * manages screenshot capture and storage, and exposes tools for the remote
+     * API agent to call back into.
+     *
+     * @param options - Partial daemon configuration (port, storageDir, etc.)
+     * @returns The DaemonServer instance
+     */
+    async startDaemon(options: Partial<DaemonConfig> = {}): Promise<DaemonServer> {
+        if (this.daemon) {
+            throw new Error('Daemon is already running. Call stopDaemon() first.');
+        }
+
+        const daemonConfig: Partial<DaemonConfig> = {
+            ...options,
+            apiKey: options.apiKey || this.config.apiKey,
+            apiUrl: options.apiUrl || this.config.apiUrl || 'https://api.neuraldiff.com',
+        };
+
+        this.daemon = new DaemonServer(daemonConfig);
+
+        // Forward daemon events to the SDK
+        this.daemon.on('started', (info) => this.emit('daemon:started', info));
+        this.daemon.on('stopped', () => this.emit('daemon:stopped'));
+        this.daemon.on('context', (ctx) => this.emit('daemon:context', ctx));
+        this.daemon.on('watch:change', (event) => this.emit('daemon:watch:change', event));
+
+        await this.daemon.start();
+
+        // If the SDK client was pointing at the default URL, it is now talking to our daemon
+        this.emit('daemon:started', {
+            port: daemonConfig.port || 7878,
+            host: daemonConfig.host || '127.0.0.1',
+        });
+
+        return this.daemon;
+    }
+
+    /**
+     * Stop the local daemon server.
+     */
+    async stopDaemon(): Promise<void> {
+        if (!this.daemon) {
+            return;
+        }
+
+        await this.daemon.stop();
+        this.daemon = null;
+    }
+
+    /**
+     * Get the daemon status. Returns null if no daemon is running.
+     */
+    getDaemonStatus(): DaemonStatus | null {
+        if (!this.daemon) {
+            return null;
+        }
+        return this.daemon.getStatus();
+    }
+
+    /**
+     * Get the daemon server instance (for advanced usage).
+     * Returns null if no daemon is running.
+     */
+    getDaemon(): DaemonServer | null {
+        return this.daemon;
+    }
+
     // Private helper methods
     private processWatchChange(message: any): WatchResult {
         return {
@@ -256,6 +328,33 @@ export class NeuroSpec extends EventEmitter {
 
 // Export types and utilities
 export * from './types';
+
+// Export daemon components
+export { DaemonServer } from './daemon/server';
+export { ScreenshotManager } from './daemon/screenshot-manager';
+export { AnalysisEngine } from './daemon/analysis';
+export { APIClient } from './daemon/api-client';
+export { ToolRegistry } from './daemon/tool-registry';
+export * from './daemon/hash';
+export type {
+    DaemonConfig,
+    DaemonStatus,
+    ScreenshotRecord,
+    ScreenshotCaptureRequest,
+    ScreenshotCaptureResponse,
+    BaselineRecord,
+    PerceptualHash,
+    HashComparisonResult,
+    LocalAnalysisResult,
+    CombinedAnalysisResult,
+    ToolDefinition,
+    ToolResult,
+    ToolCallRequest,
+    ToolCallResponse,
+    SessionContext,
+    WatchSession,
+    WatchChangeEvent,
+} from './daemon/types';
 
 // Export default instance factory
 export default function createNeuroSpec(options: NeuralDiffOptions): NeuroSpec {
